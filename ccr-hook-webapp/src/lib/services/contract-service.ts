@@ -215,7 +215,7 @@ class ContractService {
       address: this.attestationRegistryAddress,
       abi: ATTESTATION_REGISTRY_ABI,
       functionName: 'publishStructuredAttestation',
-      args: [request, signature],
+      args: [request, signature] as any,
       account
     });
 
