@@ -128,7 +128,7 @@ export function WalletTest() {
                     {currentNetwork?.name || `Unknown Network (${chainId})`}
                   </span>
                 </div>
-                <Badge variant={networkStatus.color}>
+                <Badge variant={networkStatus.color as "default" | "destructive" | "outline" | "secondary"}>
                   {isWrongNetwork ? 'Wrong Network' : 'Correct Network'}
                 </Badge>
               </div>
