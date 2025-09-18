@@ -216,7 +216,8 @@ class ContractService {
       abi: ATTESTATION_REGISTRY_ABI,
       functionName: 'publishStructuredAttestation',
       args: [request, signature] as any,
-      account
+      account,
+      chain: null
     });
 
     return hash;
