@@ -314,7 +314,7 @@ class ContractService {
         address: this.ccrHookAddress,
         abi: CCR_HOOK_ABI,
         functionName: 'hasValidRiskAttestation',
-        args: [poolKey]
+        args: [poolKey] as any
       });
 
       return result as boolean;
@@ -333,7 +333,7 @@ class ContractService {
         address: this.ccrHookAddress,
         abi: CCR_HOOK_ABI,
         functionName: 'getPoolRiskScore',
-        args: [poolKey]
+        args: [poolKey] as any
       });
 
       return Number(result as bigint);
