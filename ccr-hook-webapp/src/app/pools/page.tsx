@@ -205,7 +205,7 @@ export default function PoolsPage() {
                   <PoolCard
                     key={pool.id}
                     pool={pool}
-                    userTier={userTier}
+                    userTier={userTier || undefined}
                     onSimulateSwap={handleSimulateSwap}
                     onViewDetails={handleViewDetails}
                   />
@@ -217,7 +217,7 @@ export default function PoolsPage() {
                   <PoolCard
                     key={pool.id}
                     pool={pool}
-                    userTier={userTier}
+                    userTier={userTier || undefined}
                     onSimulateSwap={handleSimulateSwap}
                     onViewDetails={handleViewDetails}
                   />
@@ -229,7 +229,7 @@ export default function PoolsPage() {
                   <PoolCard
                     key={pool.id}
                     pool={pool}
-                    userTier={userTier}
+                    userTier={userTier || undefined}
                     onSimulateSwap={handleSimulateSwap}
                     onViewDetails={handleViewDetails}
                   />
@@ -308,7 +308,7 @@ export default function PoolsPage() {
                 >
                   <PoolCard
                     pool={pool}
-                    userTier={userTier}
+                    userTier={userTier || undefined}
                     onSimulateSwap={handleSimulateSwap}
                     onViewDetails={handleViewDetails}
                   />
