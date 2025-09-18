@@ -1,0 +1,299 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.25;
+
+import "./interfaces/IFHE.sol";
+
+/**
+ * @title SimpleFHE
+ * @notice Simplified FHE implementation for MVP testing
+ * @dev Mock implementation that provides FHE-like operations for development
+ */
+contract SimpleFHE is IFHE {
+    // Storage for encrypted values (in production this would be private)
+    mapping(bytes32 => uint256) private encryptedStorage;
+    mapping(bytes32 => bool) private boolStorage;
+    mapping(bytes32 => bool) private isStoredValue;
+
+    // Mock public key for encryption
+    bytes32 public constant MOCK_PUBLIC_KEY = keccak256("MOCK_FHE_PUBLIC_KEY");
+
+    // Events
+    event MockEncryption(bytes32 indexed hash, uint256 value);
+    event MockDecryption(bytes32 indexed hash, uint256 value);
+
+    /**
+     * @notice Encrypt a uint256 value
+     */
+    function encrypt(uint256 value) external view override returns (EncryptedUint256 memory) {
+        bytes32 hash = keccak256(abi.encodePacked(value, MOCK_PUBLIC_KEY, block.timestamp, msg.sender));
+        bytes memory data = abi.encodePacked(hash, value);
+
+        return EncryptedUint256({
+            data: data,
+            isInitialized: true
+        });
+    }
+
+    /**
+     * @notice Encrypt a boolean value
+     */
+    function encryptBool(bool value) external view override returns (EncryptedBool memory) {
+        bytes32 hash = keccak256(abi.encodePacked(value, MOCK_PUBLIC_KEY, block.timestamp, msg.sender));
+        bytes memory data = abi.encodePacked(hash, value ? uint8(1) : uint8(0));
+
+        return EncryptedBool({
+            data: data,
+            isInitialized: true
+        });
+    }
+
+    /**
+     * @notice Decrypt a uint256 value (mock implementation)
+     */
+    function decrypt(EncryptedUint256 memory encryptedValue) external view override returns (uint256) {
+        require(encryptedValue.isInitialized, "Value not initialized");
+
+        if (encryptedValue.data.length >= 64) {
+            // Extract the value from the mock encrypted data
+            uint256 value;
+            assembly {
+                value := mload(add(encryptedValue.data, 64))
+            }
+            return value;
+        }
+
+        // Fallback to hash-based lookup
+        bytes32 hash = keccak256(encryptedValue.data);
+        if (isStoredValue[hash]) {
+            return encryptedStorage[hash];
+        }
+
+        return 0;
+    }
+
+    /**
+     * @notice Decrypt a boolean value (mock implementation)
+     */
+    function decryptBool(EncryptedBool memory encryptedValue) external view override returns (bool) {
+        require(encryptedValue.isInitialized, "Value not initialized");
+
+        if (encryptedValue.data.length >= 33) {
+            // Extract the boolean from the mock encrypted data
+            uint8 value;
+            assembly {
+                value := byte(0, mload(add(encryptedValue.data, 33)))
+            }
+            return value == 1;
+        }
+
+        // Fallback to hash-based lookup
+        bytes32 hash = keccak256(encryptedValue.data);
+        if (isStoredValue[hash]) {
+            return boolStorage[hash];
+        }
+
+        return false;
+    }
+
+    /**
+     * @notice Add two encrypted values
+     */
+    function add(EncryptedUint256 memory a, EncryptedUint256 memory b) external view override returns (EncryptedUint256 memory) {
+        require(a.isInitialized && b.isInitialized, "Values not initialized");
+
+        // Mock addition by combining hashes
+        bytes32 resultHash = keccak256(abi.encodePacked(a.data, b.data, "add"));
+        bytes memory resultData = abi.encodePacked(resultHash, "ADD_RESULT");
+
+        emit FHEOperationPerformed("add", keccak256(a.data), resultHash);
+
+        return EncryptedUint256({
+            data: resultData,
+            isInitialized: true
+        });
+    }
+
+    /**
+     * @notice Subtract two encrypted values
+     */
+    function sub(EncryptedUint256 memory a, EncryptedUint256 memory b) external view override returns (EncryptedUint256 memory) {
+        require(a.isInitialized && b.isInitialized, "Values not initialized");
+
+        bytes32 resultHash = keccak256(abi.encodePacked(a.data, b.data, "sub"));
+        bytes memory resultData = abi.encodePacked(resultHash, "SUB_RESULT");
+
+        emit FHEOperationPerformed("sub", keccak256(a.data), resultHash);
+
+        return EncryptedUint256({
+            data: resultData,
+            isInitialized: true
+        });
+    }
+
+    /**
+     * @notice Multiply two encrypted values
+     */
+    function mul(EncryptedUint256 memory a, EncryptedUint256 memory b) external view override returns (EncryptedUint256 memory) {
+        require(a.isInitialized && b.isInitialized, "Values not initialized");
+
+        bytes32 resultHash = keccak256(abi.encodePacked(a.data, b.data, "mul"));
+        bytes memory resultData = abi.encodePacked(resultHash, "MUL_RESULT");
+
+        emit FHEOperationPerformed("mul", keccak256(a.data), resultHash);
+
+        return EncryptedUint256({
+            data: resultData,
+            isInitialized: true
+        });
+    }
+
+    /**
+     * @notice Divide two encrypted values
+     */
+    function div(EncryptedUint256 memory a, EncryptedUint256 memory b) external view override returns (EncryptedUint256 memory) {
+        require(a.isInitialized && b.isInitialized, "Values not initialized");
+
+        bytes32 resultHash = keccak256(abi.encodePacked(a.data, b.data, "div"));
+        bytes memory resultData = abi.encodePacked(resultHash, "DIV_RESULT");
+
+        emit FHEOperationPerformed("div", keccak256(a.data), resultHash);
+
+        return EncryptedUint256({
+            data: resultData,
+            isInitialized: true
+        });
+    }
+
+    /**
+     * @notice Check equality of two encrypted values
+     */
+    function eq(EncryptedUint256 memory a, EncryptedUint256 memory b) external view override returns (EncryptedBool memory) {
+        require(a.isInitialized && b.isInitialized, "Values not initialized");
+
+        bytes32 resultHash = keccak256(abi.encodePacked(a.data, b.data, "eq"));
+        bytes memory resultData = abi.encodePacked(resultHash, "EQ_RESULT");
+
+        return EncryptedBool({
+            data: resultData,
+            isInitialized: true
+        });
+    }
+
+    /**
+     * @notice Check inequality of two encrypted values
+     */
+    function ne(EncryptedUint256 memory a, EncryptedUint256 memory b) external view override returns (EncryptedBool memory) {
+        require(a.isInitialized && b.isInitialized, "Values not initialized");
+
+        bytes32 resultHash = keccak256(abi.encodePacked(a.data, b.data, "ne"));
+        bytes memory resultData = abi.encodePacked(resultHash, "NE_RESULT");
+
+        return EncryptedBool({
+            data: resultData,
+            isInitialized: true
+        });
+    }
+
+    /**
+     * @notice Check if a > b
+     */
+    function gt(EncryptedUint256 memory a, EncryptedUint256 memory b) external view override returns (EncryptedBool memory) {
+        require(a.isInitialized && b.isInitialized, "Values not initialized");
+
+        bytes32 resultHash = keccak256(abi.encodePacked(a.data, b.data, "gt"));
+        bytes memory resultData = abi.encodePacked(resultHash, "GT_RESULT");
+
+        return EncryptedBool({
+            data: resultData,
+            isInitialized: true
+        });
+    }
+
+    /**
+     * @notice Check if a >= b
+     */
+    function gte(EncryptedUint256 memory a, EncryptedUint256 memory b) external view override returns (EncryptedBool memory) {
+        require(a.isInitialized && b.isInitialized, "Values not initialized");
+
+        bytes32 resultHash = keccak256(abi.encodePacked(a.data, b.data, "gte"));
+        bytes memory resultData = abi.encodePacked(resultHash, "GTE_RESULT");
+
+        return EncryptedBool({
+            data: resultData,
+            isInitialized: true
+        });
+    }
+
+    /**
+     * @notice Check if a < b
+     */
+    function lt(EncryptedUint256 memory a, EncryptedUint256 memory b) external view override returns (EncryptedBool memory) {
+        require(a.isInitialized && b.isInitialized, "Values not initialized");
+
+        bytes32 resultHash = keccak256(abi.encodePacked(a.data, b.data, "lt"));
+        bytes memory resultData = abi.encodePacked(resultHash, "LT_RESULT");
+
+        return EncryptedBool({
+            data: resultData,
+            isInitialized: true
+        });
+    }
+
+    /**
+     * @notice Check if a <= b
+     */
+    function lte(EncryptedUint256 memory a, EncryptedUint256 memory b) external view override returns (EncryptedBool memory) {
+        require(a.isInitialized && b.isInitialized, "Values not initialized");
+
+        bytes32 resultHash = keccak256(abi.encodePacked(a.data, b.data, "lte"));
+        bytes memory resultData = abi.encodePacked(resultHash, "LTE_RESULT");
+
+        return EncryptedBool({
+            data: resultData,
+            isInitialized: true
+        });
+    }
+
+    /**
+     * @notice Check if encrypted data is valid
+     */
+    function isValidEncryption(bytes memory encryptedData) external pure override returns (bool) {
+        return encryptedData.length > 0 && encryptedData.length <= 1024;
+    }
+
+    /**
+     * @notice Get hash of encrypted data
+     */
+    function getEncryptionHash(bytes memory encryptedData) external pure override returns (bytes32) {
+        return keccak256(encryptedData);
+    }
+
+    /**
+     * @notice Verify computation proof
+     */
+    function verifyProof(bytes memory proof, bytes32 computationHash) external view override returns (bool) {
+        if (proof.length == 0) return false;
+
+        bytes32 proofHash = keccak256(proof);
+
+        // Simple proof verification for mock implementation
+        return proofHash != bytes32(0) && uint256(proofHash) % 100 < 95; // 95% success rate
+    }
+
+    /**
+     * @notice Store encrypted value for testing (only for mock)
+     */
+    function mockStoreValue(bytes32 hash, uint256 value) external {
+        encryptedStorage[hash] = value;
+        isStoredValue[hash] = true;
+        emit MockEncryption(hash, value);
+    }
+
+    /**
+     * @notice Store encrypted boolean for testing (only for mock)
+     */
+    function mockStoreBool(bytes32 hash, bool value) external {
+        boolStorage[hash] = value;
+        isStoredValue[hash] = true;
+    }
+}

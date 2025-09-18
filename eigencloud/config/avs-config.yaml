@@ -1,0 +1,213 @@
+# EigenCloud AVS Configuration for CCR Hook
+# This configuration defines the AVS service for credit risk attestations
+
+avs:
+  name: ccr-hook-avs
+  version: 1.0.0
+  description: "Confidential Credit Risk Hook AVS for Uniswap v4"
+
+  # Service metadata
+  metadata:
+    github: "https://github.com/ccr-hook/avs"
+    documentation: "https://docs.ccr-hook.io"
+    support: "support@ccr-hook.io"
+
+# Network configuration
+networks:
+  mainnet:
+    chainId: 1
+    rpc: "${MAINNET_RPC_URL}"
+    contracts:
+      serviceManager: "0x0000000000000000000000000000000000000000"
+      registryCoordinator: "0x0000000000000000000000000000000000000000"
+      stakeRegistry: "0x0000000000000000000000000000000000000000"
+    confirmations: 12
+
+  sepolia:
+    chainId: 11155111
+    rpc: "${SEPOLIA_RPC_URL}"
+    contracts:
+      serviceManager: "${SERVICE_MANAGER_ADDRESS}"
+      registryCoordinator: "${REGISTRY_COORDINATOR_ADDRESS}"
+      stakeRegistry: "${STAKE_REGISTRY_ADDRESS}"
+    confirmations: 3
+
+# Operator configuration
+operators:
+  minOperators: 3
+  maxOperators: 21
+  quorumThreshold: 66  # 66% consensus required
+
+  # BLS configuration for signature aggregation
+  bls:
+    enabled: true
+    aggregationThreshold: 2  # Minimum signatures to aggregate
+    keystore: "./operators/keystore"
+
+  # Staking requirements
+  staking:
+    minStake: "32000000000000000000"  # 32 ETH minimum
+    slashingEnabled: true
+    slashingPercentage: 10
+
+# Task configuration
+tasks:
+  # PCS computation task
+  computePCS:
+    type: "attestation"
+    timeout: 30000  # 30 seconds
+    retries: 3
+    gasLimit: 500000
+    priority: "high"
+
+  # PRS computation task
+  computePRS:
+    type: "attestation"
+    timeout: 20000  # 20 seconds
+    retries: 3
+    gasLimit: 400000
+    priority: "medium"
+
+  # Batch attestation task
+  batchAttestation:
+    type: "batch"
+    timeout: 60000  # 60 seconds
+    maxBatchSize: 10
+    gasLimit: 1000000
+    priority: "low"
+
+# Compute configuration
+compute:
+  # Resource limits
+  resources:
+    cpu: "2"
+    memory: "4Gi"
+    storage: "10Gi"
+
+  # Scaling configuration
+  scaling:
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPU: 70
+    targetMemory: 80
+
+  # Health checks
+  healthCheck:
+    enabled: true
+    path: "/health"
+    interval: 30
+    timeout: 10
+    successThreshold: 1
+    failureThreshold: 3
+
+# Security configuration
+security:
+  # TLS configuration
+  tls:
+    enabled: true
+    certFile: "./certs/tls.crt"
+    keyFile: "./certs/tls.key"
+    caFile: "./certs/ca.crt"
+
+  # Authentication
+  authentication:
+    type: "jwt"
+    issuer: "ccr-hook-avs"
+    audience: "eigencloud"
+    secretKey: "${JWT_SECRET}"
+
+  # Rate limiting
+  rateLimiting:
+    enabled: true
+    requestsPerMinute: 100
+    burstSize: 20
+
+  # Encryption
+  encryption:
+    type: "fhe"
+    provider: "cofhe"
+    publicKey: "${FHE_PUBLIC_KEY}"
+
+# Monitoring configuration
+monitoring:
+  # Prometheus metrics
+  prometheus:
+    enabled: true
+    port: 9090
+    path: "/metrics"
+
+  # Logging
+  logging:
+    level: "info"
+    format: "json"
+    output: "stdout"
+    retention: "7d"
+
+  # Tracing
+  tracing:
+    enabled: true
+    provider: "jaeger"
+    endpoint: "${JAEGER_ENDPOINT}"
+    sampleRate: 0.1
+
+# Storage configuration
+storage:
+  # Primary database
+  database:
+    type: "postgresql"
+    host: "${DB_HOST}"
+    port: 5432
+    name: "ccr_hook_avs"
+    user: "${DB_USER}"
+    password: "${DB_PASSWORD}"
+    maxConnections: 20
+
+  # Cache configuration
+  cache:
+    type: "redis"
+    host: "${REDIS_HOST}"
+    port: 6379
+    password: "${REDIS_PASSWORD}"
+    ttl: 3600
+
+  # IPFS for attestation metadata
+  ipfs:
+    enabled: true
+    gateway: "https://ipfs.io"
+    apiEndpoint: "${IPFS_API_ENDPOINT}"
+
+# Deployment configuration
+deployment:
+  # Docker configuration
+  docker:
+    image: "ccr-hook/avs-worker:latest"
+    registry: "registry.eigencloud.xyz"
+
+  # Kubernetes configuration
+  kubernetes:
+    namespace: "ccr-hook"
+    serviceAccount: "ccr-hook-avs"
+
+  # Resource allocation
+  resources:
+    requests:
+      cpu: "1"
+      memory: "2Gi"
+    limits:
+      cpu: "2"
+      memory: "4Gi"
+
+# Backup and recovery
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  retention: "30d"
+  destination: "s3://ccr-hook-backups"
+
+# Feature flags
+features:
+  fheEnabled: true
+  multiOperatorConsensus: true
+  mevRedistribution: true
+  dynamicFees: true
+  advancedAnalytics: true

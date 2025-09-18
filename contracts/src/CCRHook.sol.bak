@@ -1,0 +1,285 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.25;
+
+import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
+import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
+import {PoolKey} from "v4-core/src/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
+import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
+import {BeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
+import {ModifyLiquidityParams, SwapParams} from "v4-core/src/types/PoolOperation.sol";
+
+import "./AttestationRegistry.sol";
+import "./Policy.sol";
+
+/**
+ * @title CCRHook
+ * @notice Confidential Credit-Risk Hook for Uniswap v4
+ * @dev Enforces credit risk policies based on PCS and PRS attestations
+ */
+contract CCRHook is IHooks {
+    using PoolIdLibrary for PoolKey;
+
+    AttestationRegistry public immutable attestationRegistry;
+    Policy public immutable policy;
+
+    // Hook permissions
+    bool public constant BEFORE_SWAP_FLAG = true;
+    bool public constant BEFORE_ADD_LIQUIDITY_FLAG = true;
+    bool public constant AFTER_SWAP_FLAG = true;
+
+    // Attestation type hashes
+    bytes32 public constant PCS_TYPE = keccak256("PCS");
+    bytes32 public constant PRS_TYPE = keccak256("PRS");
+
+    // Pool-specific configurations
+    mapping(PoolId => bool) public enabledPools;
+    mapping(PoolId => uint256) public minimumPCSTier; // Minimum PCS tier for premium pools
+
+    // Events
+    event SwapBlocked(address indexed user, PoolId indexed poolId, uint256 requestedAmount, uint256 maxAllowed);
+    event LiquidityBlocked(address indexed user, PoolId indexed poolId, string reason);
+    event RiskAssessment(address indexed user, PoolId indexed poolId, uint256 pcsValue, uint256 prsValue, string riskTier);
+
+    // Errors
+    error SwapAmountExceedsLimit(uint256 requested, uint256 limit);
+    error InsufficientCreditTier(uint256 required, uint256 actual);
+    error PoolNotEnabled();
+    error AttestationExpiredOrInvalid();
+    error UnauthorizedCaller();
+
+    constructor(
+        address _attestationRegistry,
+        address _policy
+    ) {
+        attestationRegistry = AttestationRegistry(_attestationRegistry);
+        policy = Policy(_policy);
+    }
+
+    // IHooks interface implementation
+    function beforeInitialize(address, PoolKey calldata, uint160) external pure returns (bytes4) {
+        return IHooks.beforeInitialize.selector;
+    }
+
+    function afterInitialize(address, PoolKey calldata, uint160, int24) external pure returns (bytes4) {
+        return IHooks.afterInitialize.selector;
+    }
+
+    /**
+     * @notice Hook called before a swap
+     * @param sender The address initiating the swap
+     * @param key The pool key
+     * @param params Swap parameters
+     * @param hookData Additional hook data
+     * @return selector The function selector to call
+     */
+    function beforeSwap(
+        address sender,
+        PoolKey calldata key,
+        SwapParams calldata params,
+        bytes calldata hookData
+    ) external returns (bytes4) {
+        PoolId poolId = key.toId();
+
+        // Check if pool is enabled for CCR
+        if (!enabledPools[poolId]) {
+            return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+        }
+
+        // Get user DID (simplified - in production would derive from sender or tx.origin)
+        bytes32 userDID = keccak256(abi.encodePacked(sender));
+
+        // Perform risk assessment
+        (uint256 pcsValue, uint256 prsValue, Policy.ELPResult memory elp) = _performRiskAssessment(userDID, poolId);
+
+        // Check swap amount against computed limit
+        uint256 requestedAmount = _getSwapAmount(params);
+        if (requestedAmount > elp.maxNotional) {
+            emit SwapBlocked(sender, poolId, requestedAmount, elp.maxNotional);
+            revert SwapAmountExceedsLimit(requestedAmount, elp.maxNotional);
+        }
+
+        emit RiskAssessment(sender, poolId, pcsValue, prsValue, elp.riskTier);
+
+        // Apply dynamic fee if necessary (simplified implementation)
+        uint24 dynamicFee = _calculateDynamicFee(elp.feeBps);
+
+        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, dynamicFee);
+    }
+
+    /**
+     * @notice Hook called before adding liquidity
+     * @param sender The address adding liquidity
+     * @param key The pool key
+     * @param params Liquidity parameters
+     * @param hookData Additional hook data
+     * @return selector The function selector to call
+     */
+    function beforeAddLiquidity(
+        address sender,
+        PoolKey calldata key,
+        IPoolManager.ModifyLiquidityParams calldata params,
+        bytes calldata hookData
+    ) external override returns (bytes4 selector, BalanceDelta delta) {
+        PoolId poolId = key.toId();
+
+        if (!enabledPools[poolId]) {
+            return (BaseHook.beforeAddLiquidity.selector, BalanceDelta.wrap(0));
+        }
+
+        // Check minimum PCS tier for premium pools
+        uint256 minTier = minimumPCSTier[poolId];
+        if (minTier > 0) {
+            bytes32 userDID = keccak256(abi.encodePacked(sender));
+
+            try attestationRegistry.getLatestAttestation(userDID, PCS_TYPE) returns (
+                AttestationRegistry.Attestation memory pcsAttestation
+            ) {
+                // Extract PCS value from attestation (simplified)
+                uint256 pcsValue = _extractPCSFromAttestation(pcsAttestation);
+                uint256 userTier = _getPCSTierFromValue(pcsValue);
+
+                if (userTier < minTier) {
+                    emit LiquidityBlocked(sender, poolId, "Insufficient PCS tier");
+                    revert InsufficientCreditTier(minTier, userTier);
+                }
+            } catch {
+                emit LiquidityBlocked(sender, poolId, "No valid PCS attestation");
+                revert AttestationExpiredOrInvalid();
+            }
+        }
+
+        return (BaseHook.beforeAddLiquidity.selector, BalanceDelta.wrap(0));
+    }
+
+    /**
+     * @notice Hook called after a swap (for MEV redistribution)
+     * @param sender The address that initiated the swap
+     * @param key The pool key
+     * @param params Swap parameters
+     * @param delta The balance delta from the swap
+     * @param hookData Additional hook data
+     * @return selector The function selector to call
+     * @return hookDelta Additional delta to apply
+     */
+    function afterSwap(
+        address sender,
+        PoolKey calldata key,
+        IPoolManager.SwapParams calldata params,
+        BalanceDelta delta,
+        bytes calldata hookData
+    ) external override returns (bytes4 selector, int128 hookDelta) {
+        // Placeholder for MEV redistribution logic
+        // In production, this would redistribute captured MEV to LPs based on PRS
+        return (BaseHook.afterSwap.selector, 0);
+    }
+
+    /**
+     * @notice Enable CCR for a specific pool
+     * @param poolId The pool ID to enable
+     * @param minPCSTier Minimum PCS tier required (0 = no requirement)
+     */
+    function enablePool(PoolId poolId, uint256 minPCSTier) external {
+        // In production, this should be restricted to governance
+        enabledPools[poolId] = true;
+        minimumPCSTier[poolId] = minPCSTier;
+    }
+
+    /**
+     * @notice Disable CCR for a specific pool
+     * @param poolId The pool ID to disable
+     */
+    function disablePool(PoolId poolId) external {
+        // In production, this should be restricted to governance
+        enabledPools[poolId] = false;
+        minimumPCSTier[poolId] = 0;
+    }
+
+    /**
+     * @notice Perform risk assessment for a user and pool
+     * @param userDID User's decentralized identifier
+     * @param poolId Pool identifier
+     * @return pcsValue Personal Credit Score
+     * @return prsValue Pool Risk Score
+     * @return elp Enhanced Liquidity Parameters
+     */
+    function _performRiskAssessment(
+        bytes32 userDID,
+        PoolId poolId
+    ) internal view returns (uint256 pcsValue, uint256 prsValue, Policy.ELPResult memory elp) {
+        // Get PCS attestation
+        AttestationRegistry.Attestation memory pcsAttestation = attestationRegistry.getLatestAttestation(userDID, PCS_TYPE);
+        pcsValue = _extractPCSFromAttestation(pcsAttestation);
+
+        // Get PRS attestation
+        bytes32 poolDID = bytes32(PoolId.unwrap(poolId));
+        AttestationRegistry.Attestation memory prsAttestation = attestationRegistry.getLatestAttestation(poolDID, PRS_TYPE);
+        prsValue = _extractPRSFromAttestation(prsAttestation);
+
+        // Compute ELP
+        elp = policy.computeELP(pcsValue, prsValue);
+
+        return (pcsValue, prsValue, elp);
+    }
+
+    /**
+     * @notice Extract PCS value from attestation
+     * @param attestation The PCS attestation
+     * @return pcsValue The extracted PCS value
+     */
+    function _extractPCSFromAttestation(
+        AttestationRegistry.Attestation memory attestation
+    ) internal pure returns (uint256 pcsValue) {
+        // Simplified extraction - in production would parse JSON or structured data
+        // For MVP, we'll use a mock value based on attestation hash
+        return uint256(attestation.attestationHash) % 1000;
+    }
+
+    /**
+     * @notice Extract PRS value from attestation
+     * @param attestation The PRS attestation
+     * @return prsValue The extracted PRS value
+     */
+    function _extractPRSFromAttestation(
+        AttestationRegistry.Attestation memory attestation
+    ) internal pure returns (uint256 prsValue) {
+        // Simplified extraction - in production would parse JSON or structured data
+        // For MVP, we'll use a mock value based on attestation hash
+        return uint256(attestation.attestationHash) % 100;
+    }
+
+    /**
+     * @notice Get swap amount from parameters
+     * @param params Swap parameters
+     * @return amount The absolute swap amount
+     */
+    function _getSwapAmount(IPoolManager.SwapParams calldata params) internal pure returns (uint256 amount) {
+        // Return absolute value of amountSpecified
+        int256 amountSpecified = params.amountSpecified;
+        return amountSpecified < 0 ? uint256(-amountSpecified) : uint256(amountSpecified);
+    }
+
+    /**
+     * @notice Calculate dynamic fee based on ELP
+     * @param feeBps Fee in basis points
+     * @return dynamicFee The dynamic fee to apply
+     */
+    function _calculateDynamicFee(uint256 feeBps) internal pure returns (uint24 dynamicFee) {
+        // Convert basis points to fee format (simplified)
+        // In production, this would integrate with v4's dynamic fee mechanism
+        return uint24(feeBps);
+    }
+
+    /**
+     * @notice Get PCS tier from value
+     * @param pcsValue PCS value (0-1000)
+     * @return tier PCS tier (0-4)
+     */
+    function _getPCSTierFromValue(uint256 pcsValue) internal pure returns (uint256 tier) {
+        if (pcsValue >= 850) return 4; // Diamond
+        if (pcsValue >= 700) return 3; // Platinum
+        if (pcsValue >= 500) return 2; // Gold
+        if (pcsValue >= 300) return 1; // Silver
+        return 0; // Bronze
+    }
+}

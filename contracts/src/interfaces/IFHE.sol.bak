@@ -1,0 +1,50 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.25;
+
+/**
+ * @title IFHE Interface
+ * @notice Simplified FHE interface for CoFHE mock implementation
+ * @dev Provides basic FHE operations for the MVP
+ */
+interface IFHE {
+    // FHE Data Types
+    struct EncryptedUint256 {
+        bytes data;
+        bool isInitialized;
+    }
+
+    struct EncryptedBool {
+        bytes data;
+        bool isInitialized;
+    }
+
+    // Events
+    event FHEOperationPerformed(string operation, bytes32 inputHash, bytes32 outputHash);
+    event FHEValueEncrypted(bytes32 indexed valueHash, address indexed operator);
+    event FHEValueDecrypted(bytes32 indexed valueHash, address indexed operator);
+
+    // Core FHE Operations
+    function encrypt(uint256 value) external view returns (EncryptedUint256 memory);
+    function encryptBool(bool value) external view returns (EncryptedBool memory);
+    function decrypt(EncryptedUint256 memory encryptedValue) external view returns (uint256);
+    function decryptBool(EncryptedBool memory encryptedValue) external view returns (bool);
+
+    // Homomorphic Operations
+    function add(EncryptedUint256 memory a, EncryptedUint256 memory b) external view returns (EncryptedUint256 memory);
+    function sub(EncryptedUint256 memory a, EncryptedUint256 memory b) external view returns (EncryptedUint256 memory);
+    function mul(EncryptedUint256 memory a, EncryptedUint256 memory b) external view returns (EncryptedUint256 memory);
+    function div(EncryptedUint256 memory a, EncryptedUint256 memory b) external view returns (EncryptedUint256 memory);
+
+    // Comparison Operations
+    function eq(EncryptedUint256 memory a, EncryptedUint256 memory b) external view returns (EncryptedBool memory);
+    function ne(EncryptedUint256 memory a, EncryptedUint256 memory b) external view returns (EncryptedBool memory);
+    function gt(EncryptedUint256 memory a, EncryptedUint256 memory b) external view returns (EncryptedBool memory);
+    function gte(EncryptedUint256 memory a, EncryptedUint256 memory b) external view returns (EncryptedBool memory);
+    function lt(EncryptedUint256 memory a, EncryptedUint256 memory b) external view returns (EncryptedBool memory);
+    function lte(EncryptedUint256 memory a, EncryptedUint256 memory b) external view returns (EncryptedBool memory);
+
+    // Utility Functions
+    function isValidEncryption(bytes memory encryptedData) external view returns (bool);
+    function getEncryptionHash(bytes memory encryptedData) external pure returns (bytes32);
+    function verifyProof(bytes memory proof, bytes32 computationHash) external view returns (bool);
+}
