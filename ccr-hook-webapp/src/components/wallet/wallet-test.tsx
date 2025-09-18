@@ -25,7 +25,7 @@ export function WalletTest() {
   const { disconnect } = useDisconnect()
 
   const [isWrongNetwork, setIsWrongNetwork] = useState(false)
-  const [selectedRequiredNetwork, setSelectedRequiredNetwork] = useState(REQUIRED_NETWORK_ID)
+  const [selectedRequiredNetwork, setSelectedRequiredNetwork] = useState<number>(REQUIRED_NETWORK_ID)
 
   const currentNetwork = SUPPORTED_NETWORKS.find(network => network.id === chainId)
   const requiredNetwork = SUPPORTED_NETWORKS.find(network => network.id === selectedRequiredNetwork)
