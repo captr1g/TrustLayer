@@ -393,7 +393,7 @@ export default function DashboardPage() {
                         <PoolCard
                           key={pool.id}
                           pool={pool}
-                          userTier={userTier}
+                          userTier={userTier || undefined}
                           onSimulateSwap={() => window.location.href = `/pools/${pool.id}`}
                         />
                       ))}
@@ -465,7 +465,7 @@ export default function DashboardPage() {
                         <PoolCard
                           key={pool.id}
                           pool={pool}
-                          userTier={userTier}
+                          userTier={userTier || undefined}
                           onSimulateSwap={() => window.location.href = `/pools/${pool.id}`}
                           onViewDetails={() => window.location.href = `/pools/${pool.id}`}
                         />
@@ -480,7 +480,7 @@ export default function DashboardPage() {
                         <PoolCard
                           key={pool.id}
                           pool={pool}
-                          userTier={userTier}
+                          userTier={userTier || undefined}
                           onSimulateSwap={() => window.location.href = `/pools/${pool.id}`}
                           onViewDetails={() => window.location.href = `/pools/${pool.id}`}
                         />
