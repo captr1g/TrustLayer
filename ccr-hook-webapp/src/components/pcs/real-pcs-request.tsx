@@ -21,7 +21,7 @@ import {
   Award,
   TrendingUp
 } from 'lucide-react'
-import { avsService } from '@/lib/services/avs-service'
+import AVSService, { avsService } from '@/lib/services/avs-service'
 import { fheService } from '@/lib/services/fhe-service'
 import { contractService } from '@/lib/services/contract-service'
 
@@ -180,7 +180,7 @@ export function RealPCSRequest() {
       }))
 
       // Step 3: Compute PCS using AVS
-      const subject = avsService.constructor.createSubject(address)
+      const subject = AVSService.createSubject(address)
       const pcsResult = await avsService.computePCS(encryptedFeatures, subject)
 
       if (!pcsResult.success) {
