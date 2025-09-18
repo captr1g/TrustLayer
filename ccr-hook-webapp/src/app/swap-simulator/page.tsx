@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { SwapSimulatorComponent } from '@/components/swap/swap-simulator'
@@ -93,7 +93,7 @@ const pools: Pool[] = [
   }
 ]
 
-export default function SwapSimulatorPage() {
+function SwapSimulatorContent() {
   const searchParams = useSearchParams()
   const poolParam = searchParams.get('pool')
 
@@ -268,5 +268,13 @@ export default function SwapSimulatorPage() {
         </motion.div>
       </div>
     </div>
+  )
+}
+
+export default function SwapSimulatorPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <SwapSimulatorContent />
+    </Suspense>
   )
 }
