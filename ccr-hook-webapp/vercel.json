@@ -10,7 +10,7 @@
     }
   },
   "env": {
-    "NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID": "@wallet_connect_project_id"
+    "NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID": "7c51bad72b63a86519014beaa30e2a9a"
   },
   "headers": [
     {
